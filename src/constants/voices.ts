@@ -5,31 +5,31 @@ export const VOICE_OPTIONS: VoiceOption[] = [
     id: "Charon",
     label: "Charon",
     character: "Berat, berwibawa, tenang",
-    recommendedFor: "Dokumenter sejarah & arsip",
+    recommendedFor: "Dokumenter & narasi serius",
   },
   {
     id: "Fenrir",
     label: "Fenrir",
     character: "Tegas, resonan, dramatis",
-    recommendedFor: "Kronologi pertempuran & ketegangan",
+    recommendedFor: "Trailer, ketegangan & berita",
   },
   {
     id: "Kore",
     label: "Kore",
     character: "Jernih, terukur, artikulatif",
-    recommendedFor: "Narasi informatif & edukasi",
+    recommendedFor: "Edukasi, YouTube & profil",
   },
   {
     id: "Puck",
     label: "Puck",
     character: "Lincah, ekspresif, hangat",
-    recommendedFor: "Penceritaan dinamis",
+    recommendedFor: "Promosi, iklan & hiburan",
   },
   {
     id: "Zephyr",
     label: "Zephyr",
     character: "Lembut, reflektif, elegan",
-    recommendedFor: "Prolog, epilog & refleksi",
+    recommendedFor: "Podcast, cerita & audiobuku",
   },
 ];
 
@@ -38,24 +38,30 @@ export const STYLE_PRESETS: StylePreset[] = [
     id: "dokumenter",
     label: "Dokumenter Berwibawa",
     prompt:
-      "Narator dokumenter sejarah berbahasa Indonesia yang berwibawa, tenang, intonasi stabil, artikulasi sangat jelas, dengan jeda dramatis pada setiap penyebutan tanggal dan nama tempat.",
+      "Narator dokumenter berbahasa Indonesia yang berwibawa, tenang, intonasi stabil, artikulasi sangat jelas, dengan jeda dramatis pada bagian penting.",
   },
   {
-    id: "investigatif",
-    label: "Jurnalisme Investigasi",
+    id: "edukasi",
+    label: "YouTube & Edukasi",
     prompt:
-      "Gaya penyiar jurnalisme investigasi yang tegas, ritme terstruktur, penekanan kuat pada fakta kunci seperti embargo minyak, pertempuran laut, dan runtuhnya kekuasaan kolonial.",
+      "Pembawa acara video edukasi yang hangat, komunikatif, ritme mengalir alami, jelas, dan mudah diikuti pendengar.",
   },
   {
-    id: "dramatis",
-    label: "Dramatis Sinematik",
+    id: "iklan",
+    label: "Iklan & Promosi",
     prompt:
-      "Narasi film dokumenter sinematik dengan dinamika emosi bertahap: tegang saat invasi dan pertempuran, lirih saat penderitaan romusha, dan khidmat penuh harap pada bagian Proklamasi.",
+      "Pengisi suara komersial yang berenergi, persuasif, cerah, antusias, dengan penekanan kuat pada pesan utama.",
   },
   {
-    id: "reflektif",
-    label: "Reflektif Museum",
+    id: "podcast",
+    label: "Podcast & Bercerita",
     prompt:
-      "Suara pemandu pameran museum sejarah yang hangat, intim, bertempo agak lambat, mengundang pendengar merenungkan perjalanan lahirnya sebuah bangsa.",
+      "Gaya bertutur santai dan intim seperti berbincang akrab, tempo sedikit tenang, dengan ekspresi dan jeda napas yang natural.",
+  },
+  {
+    id: "berita",
+    label: "Berita & Korporat",
+    prompt:
+      "Penyiar berita profesional yang tegas, netral, terstruktur, rapi, dan berartikulasi tajam di setiap kalimat.",
   },
 ];

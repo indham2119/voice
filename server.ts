@@ -223,6 +223,7 @@ async function startServer() {
       const body = req.body as {
         message?: unknown;
         history?: unknown;
+        projectTitle?: unknown;
         activeChapterTitle?: unknown;
         activeVoiceName?: unknown;
         activeStyle?: unknown;
@@ -252,6 +253,10 @@ async function startServer() {
           parts: [{ text: item.text }],
         }));
 
+      const projectTitle =
+        typeof body.projectTitle === "string" && body.projectTitle.trim()
+          ? body.projectTitle.trim()
+          : "Proyek Voiceover";
       const activeChapterTitle =
         typeof body.activeChapterTitle === "string"
           ? body.activeChapterTitle
@@ -265,23 +270,24 @@ async function startServer() {
           ? body.scriptExcerpt.slice(0, 8000)
           : "";
 
-      const systemInstruction = `Anda adalah Sutradara Suara & Asisten Riset Sejarah untuk proyek dokumenter "Arsip Suara 1945" (naskah narasi sejarah Indonesia 1939–1945: dari Hindia Belanda, perebutan minyak Tarakan/Palembang/Balikpapan, invasi Jepang, penyerahan Kalijati 8 Maret 1942, masa pendudukan & romusha, hingga Proklamasi 17 Agustus 1945).
+      const systemInstruction = `Anda adalah Sutradara Suara & Editor Naskah Voiceover untuk aplikasi "Studio Voiceover". Anda membantu pengguna mengubah naskah apa pun—dokumenter, video YouTube, iklan, narasi edukasi, podcast, maupun cerita—menjadi audio voiceover yang natural dan memikat.
 
 Peran Anda:
-1. Membantu pengguna mengarahkan intonasi, jeda, penekanan kata, dan emosi voiceover (VO) dalam bahasa Indonesia.
-2. Memberikan panduan pelafalan yang tepat untuk nama tokoh dan tempat historis (misalnya Karel Doorman, Hitoshi Imamura, Tjarda van Starkenborgh, Ter Poorten, Langoan, Eretan Wetan, Kragan, Kalijati, BPUPKI, Rengasdengklok).
-3. Menyarankan arahan gaya suara ringkas (speechMetadata style) dalam 1 kalimat bila pengguna meminta variasi gaya pembacaan. Jika menyarankan arahan gaya baru, bungkus saran gaya tersebut dalam format: [GAYA: <teks arahan gaya>] agar mudah diterapkan ke studio.
-4. Menjawab pertanyaan fakta sejarah dan struktur dramaturgi dari naskah yang sedang dikerjakan.
+1. Membantu pengguna mengarahkan intonasi, jeda, penekanan kata, tempo, dan emosi pembacaan (VO) sesuai jenis kontennya.
+2. Membantu memoles kalimat agar lebih enak diucapkan (conversational/broadcast-ready) jika pengguna memintanya.
+3. Memberikan panduan pelafalan yang tepat untuk istilah asing, nama tokoh, atau kata yang rawan salah baca.
+4. Menyarankan arahan gaya suara ringkas (speechMetadata style) dalam 1 kalimat bila pengguna meminta variasi gaya pembacaan. Jika menyarankan arahan gaya baru, bungkus saran gaya tersebut dalam format: [GAYA: <teks arahan gaya>] agar dapat langsung diterapkan pengguna ke studio.
 
 Konteks Studio Saat Ini:
-- Babak aktif: ${activeChapterTitle}
+- Judul proyek: ${projectTitle}
+- Segmen aktif: ${activeChapterTitle}
 - Profil suara aktif: ${activeVoiceName}
 - Arahan gaya aktif: ${activeStyle}
 
-Cuplikan Naskah:
+Cuplikan Naskah Segmen Aktif:
 ${scriptExcerpt}
 
-Gunakan bahasa Indonesia yang lugas, bernas, dan praktis seperti sutradara studio rekaman dokumenter.`;
+Gunakan bahasa Indonesia yang lugas, ramah, dan praktis seperti sutradara studio rekaman.`;
 
       const ai = getAiClient();
       const chat = ai.chats.create({

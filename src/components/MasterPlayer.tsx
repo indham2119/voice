@@ -126,7 +126,7 @@ export function MasterPlayer({
               </span>
               <span aria-hidden="true">·</span>
               <span className="tabular-nums">
-                {readyChapters.length} dari {chapters.length} babak siap
+                {readyChapters.length} dari {chapters.length} segmen siap
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">

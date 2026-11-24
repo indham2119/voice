@@ -1,10 +1,9 @@
-import { AlertCircle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChapterList } from "./components/ChapterList";
 import { DirectorChat } from "./components/DirectorChat";
 import { Header } from "./components/Header";
 import { MasterPlayer } from "./components/MasterPlayer";
-import { SourceDrawer } from "./components/SourceDrawer";
+import { ScriptInputSection } from "./components/ScriptInputSection";
 import { VoiceConfigPanel } from "./components/VoiceConfigPanel";
 import { STYLE_PRESETS } from "./constants/voices";
 import {
@@ -18,6 +17,7 @@ import {
   countWords,
   estimateDurationSeconds,
   formatTimecode,
+  parseGeneralScript,
   parseNarrationScript,
 } from "./utils/scriptParser";
 import {
@@ -29,7 +29,8 @@ import {
   uint8ArrayToBlobUrl,
 } from "./utils/wavUtils";
 
-const SCRIPT_ASSET_URL = "/assets/aistudio/narasi_VO_indonesia_929e98af.txt";
+const SAMPLE_SCRIPT_URL = "/assets/aistudio/narasi_VO_indonesia_929e98af.txt";
+const STORAGE_KEY = "studio_voiceover_project_v1";
 
 function nowTimeLabel(): string {
   return new Date().toLocaleTimeString("id-ID", {
@@ -38,11 +39,21 @@ function nowTimeLabel(): string {
   });
 }
 
+function slugifyFilename(title: string): string {
+  const clean = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return clean || "voiceover_master";
+}
+
 export default function App() {
-  const [rawScript, setRawScript] = useState("");
+  const [projectTitle, setProjectTitle] = useState("Proyek Voiceover Baru");
+  const [draftRawText, setDraftRawText] = useState("");
   const [chapters, setChapters] = useState<ScriptChapter[]>([]);
-  const [scriptLoading, setScriptLoading] = useState(true);
-  const [scriptError, setScriptError] = useState<string | null>(null);
+  const [isInputExpanded, setIsInputExpanded] = useState(true);
+  const [isLoadingSample, setIsLoadingSample] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   // Studio Voice Settings
   const [selectedVoice, setSelectedVoice] = useState<VoiceName>("Charon");
@@ -51,7 +62,7 @@ export default function App() {
   );
   const [stylePrompt, setStylePrompt] = useState(STYLE_PRESETS[0].prompt);
 
-  // Audio State per Chapter
+  // Audio State per Segment
   const [audioMap, setAudioMap] = useState<Record<string, ChapterAudioState>>({});
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -71,17 +82,16 @@ export default function App() {
 
   // Navigation & Mobile Tabs
   const [activeSection, setActiveSection] = useState<
-    "studio" | "player" | "chat" | "source"
-  >("studio");
+    "input" | "studio" | "player" | "chat"
+  >("input");
   const [mobilePanel, setMobilePanel] = useState<"studio" | "chat">("studio");
-  const [showSourceDrawer, setShowSourceDrawer] = useState(false);
 
   // Multi-turn Gemini Chatbot State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: "welcome-msg",
       role: "model",
-      text: "Selamat datang di ruang produksi Arsip Suara 1945. Naskah dokumenter Anda (1939–1945) telah dibagi menjadi 6 babak kronologis.\n\nAnda dapat langsung menekan Buat Semua Suara untuk menghasilkan audio WAV seluruh naskah, atau berdiskusi dengan saya mengenai intonasi, jeda dramatis, maupun pelafalan nama tokoh sejarah.",
+      text: "Selamat datang di Studio Voiceover. Tempelkan naskah Anda atau unggah file .txt di bagian atas untuk mulai membuat audio narasi.\n\nSaya siap membantu mengatur intonasi, tanda jeda, memperbaiki kalimat agar lebih enak diucapkan, atau menyarankan gaya suara yang tepat.",
       timestamp: nowTimeLabel(),
     },
   ]);
@@ -91,39 +101,49 @@ export default function App() {
   const masterAudioRef = useRef<HTMLAudioElement | null>(null);
   const auditionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Load local narration script asset
+  // Restore saved workspace from localStorage if available
   useEffect(() => {
-    let active = true;
-    async function loadScript() {
-      setScriptLoading(true);
-      setScriptError(null);
-      try {
-        const res = await fetch(SCRIPT_ASSET_URL);
-        if (!res.ok) {
-          throw new Error(`Gagal memuat naskah (${res.status})`);
-        }
-        const text = await res.text();
-        if (!active) return;
-        setRawScript(text);
-        const parsed = parseNarrationScript(text);
-        setChapters(parsed);
-        if (parsed.length > 0) {
-          setActiveChapterId(parsed[0].id);
-        }
-      } catch (err: unknown) {
-        if (!active) return;
-        setScriptError(
-          err instanceof Error ? err.message : "Gagal memuat berkas naskah."
-        );
-      } finally {
-        if (active) setScriptLoading(false);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as {
+        projectTitle?: string;
+        draftRawText?: string;
+        chapters?: ScriptChapter[];
+        selectedVoice?: VoiceName;
+        stylePrompt?: string;
+      };
+      if (parsed.projectTitle) setProjectTitle(parsed.projectTitle);
+      if (parsed.draftRawText) setDraftRawText(parsed.draftRawText);
+      if (Array.isArray(parsed.chapters) && parsed.chapters.length > 0) {
+        setChapters(parsed.chapters);
+        setActiveChapterId(parsed.chapters[0].id);
+        setIsInputExpanded(false);
       }
+      if (parsed.selectedVoice) setSelectedVoice(parsed.selectedVoice);
+      if (parsed.stylePrompt) setStylePrompt(parsed.stylePrompt);
+    } catch {
+      // Ignore malformed local storage
     }
-    loadScript();
-    return () => {
-      active = false;
-    };
   }, []);
+
+  // Persist script workspace to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          projectTitle,
+          draftRawText,
+          chapters,
+          selectedVoice,
+          stylePrompt,
+        })
+      );
+    } catch {
+      // Ignore quota errors
+    }
+  }, [projectTitle, draftRawText, chapters, selectedVoice, stylePrompt]);
 
   // Cleanup Blob URLs on unmount
   useEffect(() => {
@@ -134,6 +154,74 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const clearAllAudio = useCallback(() => {
+    if (masterAudioRef.current) {
+      masterAudioRef.current.pause();
+      masterAudioRef.current.removeAttribute("src");
+    }
+    setIsPlaying(false);
+    setAudioMap((prev) => {
+      Object.values(prev).forEach((s) => {
+        if (s.blobUrl) URL.revokeObjectURL(s.blobUrl);
+      });
+      return {};
+    });
+  }, []);
+
+  const handleApplyScript = (rawText: string, customTitle?: string) => {
+    const parsed = parseGeneralScript(rawText);
+    clearAllAudio();
+    setChapters(parsed);
+    if (customTitle) {
+      setProjectTitle(customTitle);
+    }
+    if (parsed.length > 0) {
+      setActiveChapterId(parsed[0].id);
+      setIsInputExpanded(false);
+    }
+  };
+
+  const handleLoadSampleScript = async () => {
+    setIsLoadingSample(true);
+    setSampleError(null);
+    try {
+      const res = await fetch(SAMPLE_SCRIPT_URL);
+      if (!res.ok) {
+        throw new Error(`Gagal memuat contoh naskah (${res.status})`);
+      }
+      const text = await res.text();
+      clearAllAudio();
+      const parsed = parseNarrationScript(text);
+      setProjectTitle("Dokumenter Sejarah Indonesia (1939–1945)");
+      setDraftRawText(text);
+      setChapters(parsed);
+      if (parsed.length > 0) {
+        setActiveChapterId(parsed[0].id);
+      }
+      setIsInputExpanded(false);
+    } catch (err: unknown) {
+      setSampleError(
+        err instanceof Error ? err.message : "Gagal memuat contoh naskah."
+      );
+    } finally {
+      setIsLoadingSample(false);
+    }
+  };
+
+  const handleResetBlank = () => {
+    clearAllAudio();
+    setProjectTitle("Proyek Voiceover Baru");
+    setDraftRawText("");
+    setChapters([]);
+    setActiveChapterId(null);
+    setIsInputExpanded(true);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignore storage error
+    }
+  };
 
   const totalWords = useMemo(
     () => chapters.reduce((acc, ch) => acc + ch.wordCount, 0),
@@ -200,7 +288,7 @@ export default function App() {
   const generateChapter = useCallback(
     async (chapterId: string): Promise<boolean> => {
       const target = chapters.find((ch) => ch.id === chapterId);
-      if (!target) return false;
+      if (!target || !target.text.trim()) return false;
 
       setAudioMap((prev) => {
         const oldUrl = prev[chapterId]?.blobUrl;
@@ -229,7 +317,9 @@ export default function App() {
         return true;
       } catch (err: unknown) {
         const msg =
-          err instanceof Error ? err.message : "Gagal mensintesis suara babak.";
+          err instanceof Error
+            ? err.message
+            : "Gagal mensintesis suara segmen.";
         setAudioMap((prev) => ({
           ...prev,
           [chapterId]: {
@@ -249,7 +339,7 @@ export default function App() {
     setIsBatchGenerating(true);
 
     const pendingChapters = chapters.filter(
-      (ch) => audioMap[ch.id]?.status !== "ready"
+      (ch) => audioMap[ch.id]?.status !== "ready" && ch.text.trim().length > 0
     );
     const targets = pendingChapters.length > 0 ? pendingChapters : chapters;
 
@@ -272,18 +362,21 @@ export default function App() {
   };
 
   // Master Audio Player synchronization
-  const playBlobUrlInMaster = useCallback((chapterId: string, blobUrl: string) => {
-    const audioEl = masterAudioRef.current;
-    if (!audioEl) return;
-    setActiveChapterId(chapterId);
-    if (audioEl.src !== blobUrl) {
-      audioEl.src = blobUrl;
-    }
-    audioEl
-      .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
-  }, []);
+  const playBlobUrlInMaster = useCallback(
+    (chapterId: string, blobUrl: string) => {
+      const audioEl = masterAudioRef.current;
+      if (!audioEl) return;
+      setActiveChapterId(chapterId);
+      if (audioEl.src !== blobUrl) {
+        audioEl.src = blobUrl;
+      }
+      audioEl
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    },
+    []
+  );
 
   const handlePlayChapter = (chapterId: string) => {
     const state = audioMap[chapterId];
@@ -383,8 +476,10 @@ export default function App() {
     setAuditionError(null);
     setIsAuditioningVoice(true);
     try {
+      const firstLine = activeChapter?.lines[0];
       const sampleText =
-        "Tahun 1939, belum ada negara bernama Indonesia. Wilayah ini masih koloni Belanda bernama Hindia Belanda.";
+        firstLine ||
+        "Halo, ini adalah contoh suara narasi untuk proyek Anda. Atur gaya dan intonasi sesuai kebutuhan cerita.";
       const result = await synthesizeText(sampleText);
       const el = auditionAudioRef.current;
       if (el) {
@@ -428,13 +523,16 @@ export default function App() {
     }
   };
 
-  // Download Per-Chapter or Stitched Master WAV
+  // Download Per-Segment or Stitched Master WAV
   const handleDownloadChapter = (chapterId: string) => {
     const ch = chapters.find((c) => c.id === chapterId);
     const state = audioMap[chapterId];
     if (!ch || !state?.audioBase64) return;
     const bytes = base64ToUint8Array(state.audioBase64);
-    downloadWavBytes(bytes, `VO_Babak_${ch.roman}_${ch.id}.wav`);
+    downloadWavBytes(
+      bytes,
+      `${slugifyFilename(projectTitle)}_segmen_${ch.roman}.wav`
+    );
   };
 
   const handleDownloadMaster = () => {
@@ -443,10 +541,14 @@ export default function App() {
       .filter((b64) => b64.length > 0);
     const merged = mergeWavClips(orderedClips);
     if (!merged) return;
-    downloadWavBytes(merged, "narasi_VO_indonesia_1939_1945_master.wav");
+    downloadWavBytes(merged, `${slugifyFilename(projectTitle)}_master.wav`);
   };
 
-  const handleUpdateChapterText = (chapterId: string, newText: string) => {
+  const handleUpdateChapter = (
+    chapterId: string,
+    newTitle: string,
+    newText: string
+  ) => {
     setChapters((prev) =>
       prev.map((ch) => {
         if (ch.id !== chapterId) return ch;
@@ -457,12 +559,53 @@ export default function App() {
         const normalizedText = lines.join("\n\n");
         return {
           ...ch,
+          title: newTitle.trim() || ch.title,
           lines,
           text: normalizedText,
           wordCount: countWords(normalizedText),
         };
       })
     );
+  };
+
+  const handleDeleteChapter = (chapterId: string) => {
+    setChapters((prev) => {
+      const filtered = prev
+        .filter((ch) => ch.id !== chapterId)
+        .map((ch, idx) => ({
+          ...ch,
+          roman: String(idx + 1).padStart(2, "0"),
+        }));
+      if (activeChapterId === chapterId) {
+        setActiveChapterId(filtered[0]?.id || null);
+      }
+      return filtered;
+    });
+    setAudioMap((prev) => {
+      const next = { ...prev };
+      if (next[chapterId]?.blobUrl) {
+        URL.revokeObjectURL(next[chapterId].blobUrl!);
+      }
+      delete next[chapterId];
+      return next;
+    });
+  };
+
+  const handleAddChapter = () => {
+    const nextIndex = chapters.length + 1;
+    const roman = String(nextIndex).padStart(2, "0");
+    const defaultLine = "Tulis kalimat narasi untuk segmen ini.";
+    const newChapter: ScriptChapter = {
+      id: `segmen-${nextIndex}-${Date.now().toString(36)}`,
+      roman,
+      title: `Segmen ${roman}`,
+      period: "2 baris",
+      lines: [defaultLine],
+      text: defaultLine,
+      wordCount: countWords(defaultLine),
+    };
+    setChapters((prev) => [...prev, newChapter]);
+    setActiveChapterId(newChapter.id);
   };
 
   // Multi-turn Gemini Chatbot
@@ -499,12 +642,13 @@ export default function App() {
         body: JSON.stringify({
           message: userText,
           history: historyPayload,
+          projectTitle,
           activeChapterTitle: activeChapter
-            ? `Babak ${activeChapter.roman}: ${activeChapter.title}`
-            : "Seluruh Naskah",
+            ? `Segmen ${activeChapter.roman}: ${activeChapter.title}`
+            : "Belum ada segmen aktif",
           activeVoiceName: selectedVoice,
           activeStyle: stylePrompt,
-          scriptExcerpt: activeChapter ? activeChapter.text : rawScript,
+          scriptExcerpt: activeChapter ? activeChapter.text : draftRawText,
         }),
       });
 
@@ -577,18 +721,14 @@ export default function App() {
     setActiveChapterId(chapter.id);
     setMobilePanel("chat");
     handleSendMessage(
-      `Berikan arahan penyutradaraan suara (intonasi, tempo, penekanan, dan pelafalan istilah penting) untuk Babak ${chapter.roman}: ${chapter.title}, serta usulkan 1 kalimat arahan gaya dalam format [GAYA: ...].`
+      `Berikan arahan penyutradaraan suara (intonasi, tempo, jeda, dan pelafalan istilah penting) untuk Segmen ${chapter.roman}: ${chapter.title}, serta usulkan 1 kalimat arahan gaya dalam format [GAYA: ...].`
     );
   };
 
   const handleNavigate = (
-    section: "studio" | "player" | "chat" | "source"
+    section: "input" | "studio" | "player" | "chat"
   ) => {
     setActiveSection(section);
-    if (section === "source") {
-      setShowSourceDrawer(true);
-      return;
-    }
     if (section === "chat") {
       setMobilePanel("chat");
       document
@@ -597,7 +737,12 @@ export default function App() {
       return;
     }
     setMobilePanel("studio");
-    if (section === "player") {
+    if (section === "input") {
+      setIsInputExpanded(true);
+      document
+        .getElementById("input-naskah")
+        ?.scrollIntoView({ behavior: "smooth" });
+    } else if (section === "player") {
       document
         .getElementById("pemutar-master")
         ?.scrollIntoView({ behavior: "smooth" });
@@ -661,21 +806,19 @@ export default function App() {
 
       {/* Main 2-Column Desktop Studio Layout */}
       <main className="mx-auto grid max-w-[1440px] grid-cols-1 lg:grid-cols-[1fr_400px] xl:grid-cols-[1fr_430px]">
-        {/* Left Column: Editorial Intro + Voice Settings + Master Player + Chapters */}
+        {/* Left Column: Hero + Script Input + Voice Settings + Master Player + Segments */}
         <div
           className={`min-w-0 border-r border-[#E2DDD3] ${
             mobilePanel === "studio" ? "block" : "hidden lg:block"
           }`}
         >
-          {/* Editorial Documentary Banner */}
-          <div className="border-b border-[#E2DDD3] px-6 py-8 lg:px-8 lg:py-10">
+          {/* Editorial Studio Banner */}
+          <div className="border-b border-[#E2DDD3] px-6 py-8 lg:px-8 lg:py-9">
             <div className="flex flex-wrap items-center gap-2 text-xs text-[#57534E]">
-              <span>Produksi Voiceover Dokumenter</span>
-              <span aria-hidden="true">·</span>
-              <span>1939–1945</span>
+              <span>Generator Suara Narasi</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
-                {chapters.length} Babak
+                {chapters.length} Segmen
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
@@ -683,75 +826,85 @@ export default function App() {
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
-                {totalWords} Kata (~{formatTimecode(totalEstimatedSeconds)})
+                {totalWords} Kata
+                {totalWords > 0
+                  ? ` (~${formatTimecode(totalEstimatedSeconds)})`
+                  : ""}
               </span>
             </div>
 
-            <h1 className="mt-2.5 max-w-2xl font-editorial text-4xl font-semibold tracking-tight text-[#1C1917] lg:text-[44px] lg:leading-[1.12] [text-wrap:balance]">
-              Dari Minyak Tarakan hingga Proklamasi Kemerdekaan
+            <h1 className="mt-2.5 max-w-2xl font-editorial text-4xl font-semibold tracking-tight text-[#1C1917] lg:text-[42px] lg:leading-[1.12] [text-wrap:balance]">
+              Ubah Naskah Menjadi Audio Narasi Berkualitas
             </h1>
 
             <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#57534E]">
-              Naskah narasi sejarah Indonesia telah disusun menjadi 6 babak
-              kronologis agar sintesis suara terdengar konsisten, berwibawa, dan
-              dapat diunduh sebagai satu master audio WAV utuh.
+              Tempelkan naskah Anda sendiri atau unggah file teks, pilih
+              karakter suara serta gaya penyampaiannya, lalu unduh hasilnya
+              dalam format WAV siap pakai.
             </p>
           </div>
 
-          {scriptLoading ? (
-            <div className="flex items-center gap-3 px-6 py-16 text-sm text-[#57534E] lg:px-8">
-              <Loader2 className="h-4 w-4 animate-spin text-[#9A3412]" />
-              <span>Memuat naskah narasi dari arsip lokal...</span>
-            </div>
-          ) : scriptError ? (
-            <div className="flex items-center gap-3 px-6 py-12 text-sm text-[#B91C1C] lg:px-8">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{scriptError}</span>
-            </div>
-          ) : (
-            <>
-              <VoiceConfigPanel
-                selectedVoice={selectedVoice}
-                onSelectVoice={setSelectedVoice}
-                selectedModel={selectedModel}
-                onSelectModel={setSelectedModel}
-                stylePrompt={stylePrompt}
-                onChangeStylePrompt={setStylePrompt}
-                isAuditioning={isAuditioningVoice}
-                isAuditionPlaying={isAuditionPlaying}
-                auditionError={auditionError}
-                onAuditionVoice={handleAuditionVoice}
-              />
+          <ScriptInputSection
+            projectTitle={projectTitle}
+            onChangeProjectTitle={setProjectTitle}
+            draftRawText={draftRawText}
+            onChangeDraftRawText={setDraftRawText}
+            isExpanded={isInputExpanded}
+            onToggleExpand={() => setIsInputExpanded((prev) => !prev)}
+            onApplyScript={handleApplyScript}
+            onLoadSampleScript={handleLoadSampleScript}
+            onResetBlank={handleResetBlank}
+            isLoadingSample={isLoadingSample}
+          />
 
-              <MasterPlayer
-                chapters={chapters}
-                audioMap={audioMap}
-                activeChapterId={activeChapterId}
-                isPlaying={isPlaying}
-                onSelectChapter={handleSelectChapterInPlayer}
-                onTogglePlay={handleToggleMasterPlay}
-                onNextChapter={handleNextChapter}
-                onPrevChapter={handlePrevChapter}
-                onDownloadMaster={handleDownloadMaster}
-                audioRef={masterAudioRef}
-              />
-
-              <ChapterList
-                chapters={chapters}
-                audioMap={audioMap}
-                activeChapterId={activeChapterId}
-                isPlaying={isPlaying}
-                isBatchGenerating={isBatchGenerating}
-                auditioningLineKey={auditioningLineKey}
-                onGenerateChapter={generateChapter}
-                onPlayChapter={handlePlayChapter}
-                onDownloadChapter={handleDownloadChapter}
-                onUpdateChapterText={handleUpdateChapterText}
-                onAuditionLine={handleAuditionLine}
-                onAskDirector={handleAskDirectorAboutChapter}
-              />
-            </>
+          {sampleError && (
+            <div className="border-b border-[#E2DDD3] bg-[#B91C1C]/5 px-6 py-3 text-xs font-medium text-[#B91C1C] lg:px-8">
+              {sampleError}
+            </div>
           )}
+
+          <VoiceConfigPanel
+            selectedVoice={selectedVoice}
+            onSelectVoice={setSelectedVoice}
+            selectedModel={selectedModel}
+            onSelectModel={setSelectedModel}
+            stylePrompt={stylePrompt}
+            onChangeStylePrompt={setStylePrompt}
+            isAuditioning={isAuditioningVoice}
+            isAuditionPlaying={isAuditionPlaying}
+            auditionError={auditionError}
+            onAuditionVoice={handleAuditionVoice}
+          />
+
+          <MasterPlayer
+            chapters={chapters}
+            audioMap={audioMap}
+            activeChapterId={activeChapterId}
+            isPlaying={isPlaying}
+            onSelectChapter={handleSelectChapterInPlayer}
+            onTogglePlay={handleToggleMasterPlay}
+            onNextChapter={handleNextChapter}
+            onPrevChapter={handlePrevChapter}
+            onDownloadMaster={handleDownloadMaster}
+            audioRef={masterAudioRef}
+          />
+
+          <ChapterList
+            chapters={chapters}
+            audioMap={audioMap}
+            activeChapterId={activeChapterId}
+            isPlaying={isPlaying}
+            isBatchGenerating={isBatchGenerating}
+            auditioningLineKey={auditioningLineKey}
+            onGenerateChapter={generateChapter}
+            onPlayChapter={handlePlayChapter}
+            onDownloadChapter={handleDownloadChapter}
+            onUpdateChapter={handleUpdateChapter}
+            onDeleteChapter={handleDeleteChapter}
+            onAddChapter={handleAddChapter}
+            onAuditionLine={handleAuditionLine}
+            onAskDirector={handleAskDirectorAboutChapter}
+          />
         </div>
 
         {/* Right Column: Sticky Multi-Turn Gemini Director Chatbot */}
@@ -766,8 +919,8 @@ export default function App() {
             error={chatError}
             activeChapterTitle={
               activeChapter
-                ? `Babak ${activeChapter.roman}: ${activeChapter.title}`
-                : "Seluruh Naskah"
+                ? `Segmen ${activeChapter.roman}: ${activeChapter.title}`
+                : "Belum ada segmen aktif"
             }
             onSendMessage={handleSendMessage}
             onClearChat={() =>
@@ -775,7 +928,7 @@ export default function App() {
                 {
                   id: `reset-${Date.now()}`,
                   role: "model",
-                  text: "Sesi penyutradaraan dimulai ulang. Silakan tanyakan arahan intonasi, jeda, atau pelafalan istilah sejarah untuk naskah ini.",
+                  text: "Sesi penyutradaraan dimulai ulang. Silakan tanyakan arahan intonasi, perbaikan naskah, atau pelafalan kata untuk proyek Anda.",
                   timestamp: nowTimeLabel(),
                 },
               ])
@@ -784,16 +937,6 @@ export default function App() {
           />
         </div>
       </main>
-
-      {showSourceDrawer && (
-        <SourceDrawer
-          rawText={rawScript}
-          onClose={() => {
-            setShowSourceDrawer(false);
-            setActiveSection("studio");
-          }}
-        />
-      )}
     </div>
   );
 }

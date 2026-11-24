@@ -6,7 +6,9 @@ import {
   Loader2,
   Pause,
   Play,
+  Plus,
   RotateCcw,
+  Trash2,
   Volume2,
 } from "lucide-react";
 import { useState } from "react";
@@ -23,7 +25,9 @@ interface ChapterListProps {
   onGenerateChapter: (chapterId: string) => void;
   onPlayChapter: (chapterId: string) => void;
   onDownloadChapter: (chapterId: string) => void;
-  onUpdateChapterText: (chapterId: string, newText: string) => void;
+  onUpdateChapter: (chapterId: string, newTitle: string, newText: string) => void;
+  onDeleteChapter: (chapterId: string) => void;
+  onAddChapter: () => void;
   onAuditionLine: (lineKey: string, text: string) => void;
   onAskDirector: (chapter: ScriptChapter) => void;
 }
@@ -38,27 +42,56 @@ export function ChapterList({
   onGenerateChapter,
   onPlayChapter,
   onDownloadChapter,
-  onUpdateChapterText,
+  onUpdateChapter,
+  onDeleteChapter,
+  onAddChapter,
   onAuditionLine,
   onAskDirector,
 }: ChapterListProps) {
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
   const [draftText, setDraftText] = useState("");
 
   const startEditing = (chapter: ScriptChapter) => {
     setEditingChapterId(chapter.id);
+    setDraftTitle(chapter.title);
     setDraftText(chapter.text);
   };
 
   const saveEdit = (chapterId: string) => {
-    onUpdateChapterText(chapterId, draftText);
+    onUpdateChapter(chapterId, draftTitle, draftText);
     setEditingChapterId(null);
   };
+
+  if (chapters.length === 0) {
+    return (
+      <section
+        id="naskah-babak"
+        aria-label="Daftar Segmen Narasi"
+        className="px-6 py-12 text-center lg:px-8"
+      >
+        <p className="font-editorial text-2xl font-medium text-[#1C1917]">
+          Belum ada segmen naskah
+        </p>
+        <p className="mt-2 text-sm text-[#57534E]">
+          Tempel naskah di kolom Input Naskah di atas, unggah file teks, atau tambah segmen baru secara manual.
+        </p>
+        <button
+          type="button"
+          onClick={onAddChapter}
+          className="mt-5 inline-flex items-center gap-1.5 rounded-md bg-[#9A3412] px-4 py-2 text-xs font-semibold text-white cursor-pointer hover:bg-[#7C2D12]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Tambah Segmen Pertama</span>
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section
       id="naskah-babak"
-      aria-label="Daftar Babak Narasi"
+      aria-label="Daftar Segmen Narasi"
       className="divide-y divide-[#E2DDD3]"
     >
       {chapters.map((chapter) => {
@@ -75,15 +108,13 @@ export function ChapterList({
               isCurrent ? "bg-[#FBF9F5]" : "bg-[#F7F4EE]"
             }`}
           >
-            {/* Chapter Header */}
+            {/* Segment Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[#57534E]">
                   <span className="font-mono font-medium text-[#9A3412] tabular-nums">
-                    Babak {chapter.roman}
+                    Segmen {chapter.roman}
                   </span>
-                  <span aria-hidden="true">·</span>
-                  <span>{chapter.period}</span>
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">
                     {chapter.lines.length} baris
@@ -104,14 +135,12 @@ export function ChapterList({
                   {chapter.roman}. {chapter.title}
                 </h3>
 
-                {/* Explicit Audio Status Label (no hue-only signaling) */}
+                {/* Explicit Audio Status Label */}
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
                   {audioState.status === "ready" && (
                     <span className="inline-flex items-center gap-1.5 font-medium text-[#15803D]">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span>
-                        Audio siap ({audioState.generatedVoice})
-                      </span>
+                      <span>Audio siap ({audioState.generatedVoice})</span>
                     </span>
                   )}
                   {audioState.status === "generating" && (
@@ -129,7 +158,7 @@ export function ChapterList({
                 </div>
               </div>
 
-              {/* Chapter Actions */}
+              {/* Segment Actions */}
               <div className="flex flex-wrap items-center gap-2 shrink-0">
                 {audioState.status === "ready" && (
                   <>
@@ -154,7 +183,7 @@ export function ChapterList({
                     <button
                       type="button"
                       onClick={() => onDownloadChapter(chapter.id)}
-                      title="Unduh file WAV babak ini"
+                      title="Unduh file WAV segmen ini"
                       className="inline-flex items-center gap-1.5 rounded-md border border-[#D6CEBE] bg-white px-3 py-2 text-xs font-medium text-[#1C1917] whitespace-nowrap cursor-pointer transition-colors hover:border-[#9A3412] hover:text-[#9A3412]"
                     >
                       <Download className="h-3.5 w-3.5" />
@@ -211,18 +240,45 @@ export function ChapterList({
                 >
                   Tanya Sutradara
                 </button>
+
+                {chapters.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteChapter(chapter.id)}
+                    title="Hapus segmen"
+                    className="inline-flex items-center rounded-md p-2 text-[#78716C] cursor-pointer transition-colors hover:bg-[#EFECE4] hover:text-[#B91C1C]"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Chapter Content: Edit Mode or Editorial Line-by-Line */}
+            {/* Segment Content: Edit Mode or Editorial Line-by-Line */}
             {isEditing ? (
               <div className="mt-4 space-y-3">
-                <textarea
-                  rows={Math.min(14, Math.max(6, chapter.lines.length))}
-                  value={draftText}
-                  onChange={(e) => setDraftText(e.target.value)}
-                  className="w-full rounded-md border border-[#9A3412]/50 bg-white px-4 py-3 text-[15px] leading-relaxed text-[#1C1917] focus:border-[#9A3412] focus:outline-none"
-                />
+                <div>
+                  <label className="block text-xs font-medium text-[#57534E] mb-1">
+                    Judul Segmen
+                  </label>
+                  <input
+                    type="text"
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    className="w-full rounded-md border border-[#D6CEBE] bg-white px-3.5 py-2 text-sm font-medium text-[#1C1917] focus:border-[#9A3412] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#57534E] mb-1">
+                    Isi Naskah Segmen
+                  </label>
+                  <textarea
+                    rows={Math.min(14, Math.max(5, chapter.lines.length + 1))}
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    className="w-full rounded-md border border-[#9A3412]/50 bg-white px-4 py-3 text-[15px] leading-relaxed text-[#1C1917] focus:border-[#9A3412] focus:outline-none"
+                  />
+                </div>
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
@@ -236,7 +292,7 @@ export function ChapterList({
                     onClick={() => saveEdit(chapter.id)}
                     className="rounded-md bg-[#1C1917] px-4 py-1.5 text-xs font-semibold text-white cursor-pointer hover:bg-[#44403C]"
                   >
-                    Simpan Perubahan Naskah
+                    Simpan Perubahan
                   </button>
                 </div>
               </div>
@@ -275,6 +331,18 @@ export function ChapterList({
           </article>
         );
       })}
+
+      {/* Add Segment Footer */}
+      <div className="px-6 py-5 lg:px-8">
+        <button
+          type="button"
+          onClick={onAddChapter}
+          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[#C7BFB1] bg-transparent px-4 py-2 text-xs font-semibold text-[#57534E] cursor-pointer transition-colors hover:border-[#9A3412] hover:text-[#9A3412]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Tambah Segmen Baru</span>
+        </button>
+      </div>
     </section>
   );
 }

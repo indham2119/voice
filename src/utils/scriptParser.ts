@@ -60,7 +60,7 @@ export function countWords(text: string): number {
 }
 
 export function estimateDurationSeconds(wordCount: number): number {
-  // Indonesian documentary narration averages ~128 words per minute
+  // Indonesian narration averages ~128 words per minute
   return Math.max(2, Math.round((wordCount / 128) * 60));
 }
 
@@ -83,22 +83,8 @@ export function parseNarrationScript(rawText: string): ScriptChapter[] {
     boundaryIndices.push(idx);
   }
 
-  // Fallback if custom text does not match boundaries cleanly
   if (boundaryIndices.some((idx) => idx === -1)) {
-    const chunkSize = Math.ceil(allLines.length / 6);
-    return CHAPTER_BOUNDARIES.map((rule, i) => {
-      const slice = allLines.slice(i * chunkSize, (i + 1) * chunkSize);
-      const text = slice.join("\n\n");
-      return {
-        id: rule.id,
-        roman: rule.roman,
-        title: rule.title,
-        period: rule.period,
-        lines: slice,
-        text,
-        wordCount: countWords(text),
-      };
-    }).filter((ch) => ch.lines.length > 0);
+    return parseGeneralScript(rawText);
   }
 
   return CHAPTER_BOUNDARIES.map((rule, i) => {
@@ -115,6 +101,98 @@ export function parseNarrationScript(rawText: string): ScriptChapter[] {
       lines,
       text,
       wordCount: countWords(text),
+    };
+  });
+}
+
+/**
+ * Splits any user-provided script into balanced narration segments (~180 words max per segment)
+ * or respects explicit markdown headings (`# ...`) and `---` separators.
+ */
+export function parseGeneralScript(rawText: string): ScriptChapter[] {
+  const normalized = rawText.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  const blocks = normalized
+    .split(/\n{2,}|^---+\s*$/m)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+
+  const hasExplicitHeadings = blocks.some((b) => /^#{1,3}\s+/.test(b));
+
+  const segments: { title: string; lines: string[] }[] = [];
+
+  if (hasExplicitHeadings) {
+    let currentTitle = "Pembuka";
+    let currentLines: string[] = [];
+
+    for (const block of blocks) {
+      const headingMatch = block.match(/^#{1,3}\s+(.+)$/m);
+      if (headingMatch && block.split("\n").length === 1) {
+        if (currentLines.length > 0) {
+          segments.push({ title: currentTitle, lines: currentLines });
+          currentLines = [];
+        }
+        currentTitle = headingMatch[1].trim();
+      } else {
+        const lines = block
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !/^#{1,3}\s+/.test(l));
+        currentLines.push(...lines);
+      }
+    }
+    if (currentLines.length > 0) {
+      segments.push({ title: currentTitle, lines: currentLines });
+    }
+  } else {
+    const allLines = normalized
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    const TARGET_WORDS = 175;
+    let bucket: string[] = [];
+    let bucketWords = 0;
+
+    for (const line of allLines) {
+      const lineWords = countWords(line);
+      if (bucket.length > 0 && bucketWords + lineWords > TARGET_WORDS) {
+        segments.push({
+          title: `Segmen ${String(segments.length + 1).padStart(2, "0")}`,
+          lines: bucket,
+        });
+        bucket = [line];
+        bucketWords = lineWords;
+      } else {
+        bucket.push(line);
+        bucketWords += lineWords;
+      }
+    }
+    if (bucket.length > 0) {
+      segments.push({
+        title: `Segmen ${String(segments.length + 1).padStart(2, "0")}`,
+        lines: bucket,
+      });
+    }
+  }
+
+  return segments.map((seg, idx) => {
+    const indexLabel = String(idx + 1).padStart(2, "0");
+    const text = seg.lines.join("\n\n");
+    const wc = countWords(text);
+    const title =
+      seg.title.startsWith("Segmen ") && segments.length === 1
+        ? "Naskah Utama"
+        : seg.title;
+    return {
+      id: `segmen-${idx + 1}-${Date.now().toString(36).slice(-4)}`,
+      roman: indexLabel,
+      title,
+      period: `${wc} kata`,
+      lines: seg.lines,
+      text,
+      wordCount: wc,
     };
   });
 }

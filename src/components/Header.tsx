@@ -1,8 +1,8 @@
 import { Loader2, Volume2 } from "lucide-react";
 
 interface HeaderProps {
-  activeSection: "studio" | "player" | "chat" | "source";
-  onNavigate: (section: "studio" | "player" | "chat" | "source") => void;
+  activeSection: "input" | "studio" | "player" | "chat";
+  onNavigate: (section: "input" | "studio" | "player" | "chat") => void;
   isBatchGenerating: boolean;
   batchProgressText: string;
   onGenerateAll: () => void;
@@ -27,11 +27,11 @@ export function Header({
           href="#top"
           onClick={(e) => {
             e.preventDefault();
-            onNavigate("studio");
+            onNavigate("input");
           }}
           className="font-editorial text-2xl font-semibold tracking-tight text-[#1C1917] whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9A3412]"
         >
-          Arsip Suara 1945
+          Studio Voiceover
         </a>
 
         {/* Zone 2: Concise single-line nav links */}
@@ -41,6 +41,17 @@ export function Header({
         >
           <button
             type="button"
+            onClick={() => onNavigate("input")}
+            className={`whitespace-nowrap shrink-0 cursor-pointer transition-colors hover:text-[#1C1917] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9A3412] ${
+              activeSection === "input"
+                ? "text-[#1C1917] underline decoration-[#9A3412] decoration-2 underline-offset-8"
+                : ""
+            }`}
+          >
+            Input Naskah
+          </button>
+          <button
+            type="button"
             onClick={() => onNavigate("studio")}
             className={`whitespace-nowrap shrink-0 cursor-pointer transition-colors hover:text-[#1C1917] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9A3412] ${
               activeSection === "studio"
@@ -48,7 +59,7 @@ export function Header({
                 : ""
             }`}
           >
-            Naskah &amp; Babak
+            Daftar Segmen
           </button>
           <button
             type="button"
@@ -71,17 +82,6 @@ export function Header({
             }`}
           >
             Asisten Sutradara
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate("source")}
-            className={`whitespace-nowrap shrink-0 cursor-pointer transition-colors hover:text-[#1C1917] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9A3412] ${
-              activeSection === "source"
-                ? "text-[#1C1917] underline decoration-[#9A3412] decoration-2 underline-offset-8"
-                : ""
-            }`}
-          >
-            Sumber Naskah
           </button>
         </nav>
 

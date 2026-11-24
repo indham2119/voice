@@ -13,10 +13,10 @@ interface DirectorChatProps {
 }
 
 const QUICK_PROMPTS = [
-  "Berikan arahan intonasi & jeda dramatis untuk babak ini.",
-  "Panduan pelafalan nama tokoh Belanda & Jepang di naskah.",
-  "Sarankan arahan gaya suara untuk penutup Proklamasi 17 Agustus.",
-  "Cek kata-kata yang rawan salah baca saat rekaman VO.",
+  "Perhalus kalimat di segmen aktif agar lebih enak dibacakan.",
+  "Berikan arahan intonasi & tanda jeda untuk segmen ini.",
+  "Cek istilah asing atau kata yang rawan salah lafal.",
+  "Buatkan 1 kalimat arahan gaya [GAYA: ...] yang cocok.",
 ];
 
 function extractStyleSuggestion(text: string): string | null {
@@ -64,7 +64,7 @@ export function DirectorChat({
             Asisten Sutradara Suara
           </span>
           <h2 className="mt-0.5 font-editorial text-xl font-semibold text-[#1C1917]">
-            Arahan Intonasi &amp; Riset
+            Arahan Intonasi &amp; Editor Naskah
           </h2>
           <p className="mt-0.5 text-xs text-[#57534E]">
             Fokus aktif: {activeChapterTitle}
@@ -183,7 +183,7 @@ export function DirectorChat({
                 handleSubmit(e);
               }
             }}
-            placeholder="Tanyakan intonasi, pelafalan tokoh, atau minta variasi naskah..."
+            placeholder="Minta saran intonasi, perbaikan naskah, atau pelafalan kata..."
             className="flex-1 resize-none rounded-md border border-[#D6CEBE] bg-white px-3 py-2 text-sm text-[#1C1917] placeholder:text-[#A8A29E] focus:border-[#9A3412] focus:outline-none"
           />
           <button
