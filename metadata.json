@@ -1,0 +1,8 @@
+{
+  "name": "Arsip Suara 1945",
+  "description": "Studio produksi voiceover dokumenter ",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
